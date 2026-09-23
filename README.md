@@ -2,7 +2,7 @@
 
 A personal movie watchlist app with accounts: register/sign in, add movies, mark them watched, rate them, and filter the list.
 
-- `server/` — Express API, SQLite storage (better-sqlite3), JWT auth with bcrypt-hashed passwords
+- `server/` — Express API, pluggable storage (SQLite or Supabase Postgres), JWT auth with bcrypt-hashed passwords
 - `client/` — React (Vite) single-page UI
 
 ## Getting started
@@ -12,6 +12,19 @@ npm install
 cp .env.example .env   # set JWT_SECRET for anything beyond local dev
 npm run dev            # API on :3001, UI on :5173 (proxied /api -> :3001)
 ```
+
+### Using Supabase instead of SQLite
+
+1. Run `supabase/schema.sql` in the Supabase SQL editor.
+2. Set in `.env`:
+
+```bash
+DB_DRIVER=supabase
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+```
+
+The API is the only client of the database and uses the `service_role` key, so RLS is enabled with no policies — nothing can read the tables with the anon/publishable key. Never ship the service_role key to the browser. `GET /api/health` reports the active store.
 
 Other scripts: `npm test` (API tests), `npm run lint`, `npm run build` (client production build), `npm start` (API only).
 

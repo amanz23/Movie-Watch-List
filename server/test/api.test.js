@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
-import { createDb } from '../src/db.js';
+import { createSqliteStore } from '../src/stores/sqlite.js';
 
 function app() {
-  return createApp({ db: createDb(':memory:') });
+  return createApp({ store: createSqliteStore(':memory:') });
 }
 
 async function registered(server, email = 'user@example.com') {
