@@ -3,6 +3,7 @@ import test from 'node:test';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createSqliteStore } from '../src/stores/sqlite.js';
+import { createTmdbClient } from '../src/tmdb.js';
 
 function app() {
   return createApp({ store: createSqliteStore(':memory:') });
@@ -80,6 +81,65 @@ test('validates movie input', async () => {
   assert.equal(noTitle.status, 400);
   const badRating = await request(server).post('/api/movies').set(auth).send({ title: 'Dune', rating: 99 });
   assert.equal(badRating.status, 400);
+});
+
+test('stores catalog metadata with a movie', async () => {
+  const server = app();
+  const auth = { Authorization: `Bearer ${await registered(server)}` };
+  const created = await request(server)
+    .post('/api/movies')
+    .set(auth)
+    .send({ title: 'Dune', year: 2021, tmdb_id: 438631, poster_path: '/dune.jpg' });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.movie.tmdb_id, 438631);
+
+  const list = await request(server).get('/api/movies').set(auth);
+  assert.equal(list.body.movies[0].poster_path, '/dune.jpg');
+});
+
+test('searches the catalog through TMDB', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url.toString());
+    return {
+      ok: true,
+      json: async () => ({
+        page: 1,
+        total_pages: 1,
+        results: [{ id: 1, title: 'Dune', release_date: '2021-10-22', poster_path: '/dune.jpg', overview: 'Spice.' }],
+      }),
+    };
+  };
+  const server = createApp({
+    store: createSqliteStore(':memory:'),
+    tmdb: createTmdbClient({ apiKey: 'test-key', fetchImpl }),
+  });
+  const auth = { Authorization: `Bearer ${await registered(server)}` };
+
+  const res = await request(server).get('/api/catalog/search?q=dune').set(auth);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.results[0], {
+    tmdb_id: 1,
+    title: 'Dune',
+    year: 2021,
+    release_date: '2021-10-22',
+    poster_path: '/dune.jpg',
+    overview: 'Spice.',
+  });
+  assert.ok(calls[0].includes('query=dune'));
+
+  const blank = await request(server).get('/api/catalog/search?q=').set(auth);
+  assert.equal(blank.status, 400);
+});
+
+test('reports 503 when TMDB is not configured', async () => {
+  const server = createApp({
+    store: createSqliteStore(':memory:'),
+    tmdb: createTmdbClient({ apiKey: undefined }),
+  });
+  const auth = { Authorization: `Bearer ${await registered(server)}` };
+  const res = await request(server).get('/api/catalog/search?q=dune').set(auth);
+  assert.equal(res.status, 503);
 });
 
 test('does not leak movies between users', async () => {

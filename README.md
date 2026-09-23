@@ -1,6 +1,6 @@
 # Movie-Watch-List
 
-A personal movie watchlist app with accounts: register/sign in, add movies, mark them watched, rate them, and filter the list.
+A personal movie watchlist app with accounts: search the TMDB movie catalog (including upcoming releases) with posters, add titles to your list, mark them watched, rate them, and filter the list.
 
 - `server/` — Express API, pluggable storage (SQLite or Supabase Postgres), JWT auth with bcrypt-hashed passwords
 - `client/` — React (Vite) single-page UI
@@ -9,9 +9,13 @@ A personal movie watchlist app with accounts: register/sign in, add movies, mark
 
 ```bash
 npm install
-cp .env.example .env   # set JWT_SECRET for anything beyond local dev
+cp .env.example .env   # set JWT_SECRET, and TMDB_API_KEY for catalog search
 npm run dev            # API on :3001, UI on :5173 (proxied /api -> :3001)
 ```
+
+### Movie catalog (TMDB)
+
+Catalog search and upcoming releases use [TMDB](https://www.themoviedb.org/settings/api). Set `TMDB_API_KEY` (a v3 API key or a v4 read access token) in `.env`; without it the catalog endpoints return 503 and manual add still works. Posters are served from `image.tmdb.org` using the stored `poster_path`.
 
 ### Using Supabase instead of SQLite
 
@@ -36,7 +40,9 @@ Other scripts: `npm test` (API tests), `npm run lint`, `npm run build` (client p
 | POST | `/api/auth/login` | – | Sign in, returns `{ token, user }` |
 | GET | `/api/auth/me` | Bearer | Current user |
 | GET | `/api/movies` | Bearer | List the user's movies |
-| POST | `/api/movies` | Bearer | Add `{ title, year?, notes?, watched?, rating? }` |
+| GET | `/api/catalog/search?q=` | Bearer | TMDB search results with posters |
+| GET | `/api/catalog/upcoming` | Bearer | Movies releasing in the future |
+| POST | `/api/movies` | Bearer | Add `{ title, year?, notes?, watched?, rating?, tmdb_id?, poster_path? }` |
 | PATCH | `/api/movies/:id` | Bearer | Update any of the above fields |
 | DELETE | `/api/movies/:id` | Bearer | Remove a movie |
 

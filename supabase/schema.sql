@@ -15,8 +15,14 @@ create table if not exists public.movies (
   notes text,
   watched boolean not null default false,
   rating integer check (rating between 1 and 10),
+  tmdb_id bigint,
+  poster_path text,
   created_at timestamptz not null default now()
 );
+
+-- For databases created before TMDB support.
+alter table public.movies add column if not exists tmdb_id bigint;
+alter table public.movies add column if not exists poster_path text;
 
 create index if not exists movies_user_id_idx on public.movies(user_id);
 

@@ -4,7 +4,7 @@ import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
-  { ignores: ['**/dist/**', '**/node_modules/**', 'data/**'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', '**/.vite/**', 'data/**'] },
   js.configs.recommended,
   {
     files: ['server/**/*.js'],

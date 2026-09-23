@@ -24,10 +24,16 @@ export function createSqliteStore(file = process.env.DATABASE_FILE ?? 'data/watc
       notes TEXT,
       watched INTEGER NOT NULL DEFAULT 0,
       rating INTEGER,
+      tmdb_id INTEGER,
+      poster_path TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS movies_user_id_idx ON movies(user_id);
   `);
+
+  const columns = new Set(db.prepare('PRAGMA table_info(movies)').all().map((column) => column.name));
+  if (!columns.has('tmdb_id')) db.exec('ALTER TABLE movies ADD COLUMN tmdb_id INTEGER');
+  if (!columns.has('poster_path')) db.exec('ALTER TABLE movies ADD COLUMN poster_path TEXT');
 
   const statements = {
     userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
@@ -35,7 +41,8 @@ export function createSqliteStore(file = process.env.DATABASE_FILE ?? 'data/watc
     listMovies: db.prepare('SELECT * FROM movies WHERE user_id = ? ORDER BY watched, created_at DESC'),
     movieById: db.prepare('SELECT * FROM movies WHERE id = ? AND user_id = ?'),
     insertMovie: db.prepare(
-      'INSERT INTO movies (user_id, title, year, notes, watched, rating) VALUES (@user_id, @title, @year, @notes, @watched, @rating)',
+      `INSERT INTO movies (user_id, title, year, notes, watched, rating, tmdb_id, poster_path)
+       VALUES (@user_id, @title, @year, @notes, @watched, @rating, @tmdb_id, @poster_path)`,
     ),
     deleteMovie: db.prepare('DELETE FROM movies WHERE id = ? AND user_id = ?'),
   };
@@ -65,6 +72,8 @@ export function createSqliteStore(file = process.env.DATABASE_FILE ?? 'data/watc
         notes: movie.notes ?? null,
         watched: movie.watched ?? 0,
         rating: movie.rating ?? null,
+        tmdb_id: movie.tmdb_id ?? null,
+        poster_path: movie.poster_path ?? null,
       });
       return toMovie(statements.movieById.get(Number(info.lastInsertRowid), userId));
     },

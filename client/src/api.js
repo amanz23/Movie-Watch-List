@@ -26,7 +26,13 @@ async function request(path, { method = 'GET', body } = {}) {
   return data;
 }
 
+export function posterUrl(path, size = 'w154') {
+  return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
+}
+
 export const api = {
+  searchCatalog: (query) => request(`/catalog/search?q=${encodeURIComponent(query)}`),
+  upcoming: () => request('/catalog/upcoming'),
   register: (email, password) => request('/auth/register', { method: 'POST', body: { email, password } }),
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
   me: () => request('/auth/me'),

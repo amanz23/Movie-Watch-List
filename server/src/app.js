@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { createStore } from './store.js';
+import { createTmdbClient } from './tmdb.js';
 import { hashPassword, requireAuth, signToken, verifyPassword } from './auth.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,6 +28,13 @@ function parseMovieInput(body, { partial = false } = {}) {
   if (body.watched !== undefined) {
     movie.watched = body.watched ? 1 : 0;
   }
+  if (body.tmdb_id !== undefined) {
+    movie.tmdb_id = body.tmdb_id === null || body.tmdb_id === '' ? null : Number(body.tmdb_id);
+    if (movie.tmdb_id !== null && !Number.isInteger(movie.tmdb_id)) errors.push('tmdb_id must be an integer');
+  }
+  if (body.poster_path !== undefined) {
+    movie.poster_path = body.poster_path === null ? null : String(body.poster_path);
+  }
   if (body.rating !== undefined) {
     const rating = body.rating === null || body.rating === '' ? null : Number(body.rating);
     if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 10)) {
@@ -45,12 +53,12 @@ function route(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
 }
 
-export function createApp({ store = createStore() } = {}) {
+export function createApp({ store = createStore(), tmdb = createTmdbClient() } = {}) {
   const app = express();
   app.use(cors());
   app.use(express.json());
 
-  app.get('/api/health', (req, res) => res.json({ ok: true, store: store.name }));
+  app.get('/api/health', (req, res) => res.json({ ok: true, store: store.name, catalog: tmdb.configured }));
 
   app.post(
     '/api/auth/register',
@@ -81,6 +89,22 @@ export function createApp({ store = createStore() } = {}) {
   );
 
   app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: req.user }));
+
+  app.get(
+    '/api/catalog/search',
+    requireAuth,
+    route(async (req, res) => {
+      const query = String(req.query.q ?? '').trim();
+      if (!query) return res.status(400).json({ error: 'q is required' });
+      return res.json(await tmdb.search(query, Number(req.query.page ?? 1)));
+    }),
+  );
+
+  app.get(
+    '/api/catalog/upcoming',
+    requireAuth,
+    route(async (req, res) => res.json(await tmdb.upcoming(Number(req.query.page ?? 1)))),
+  );
 
   app.get(
     '/api/movies',
@@ -130,7 +154,7 @@ export function createApp({ store = createStore() } = {}) {
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(err.status ?? 500).json({ error: err.status ? err.message : 'Internal server error' });
   });
 
   return app;

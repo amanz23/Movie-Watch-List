@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
+import Discover, { MoviePoster } from './Discover.jsx';
 
 const EMPTY_FORM = { title: '', year: '', notes: '' };
 
@@ -24,20 +25,35 @@ export default function Watchlist() {
     return movies;
   }, [movies, filter]);
 
-  async function addMovie(event) {
-    event.preventDefault();
+  async function create(payload) {
     setError('');
     try {
-      const { movie } = await api.addMovie({
-        title: form.title,
-        year: form.year === '' ? null : Number(form.year),
-        notes: form.notes || null,
-      });
+      const { movie } = await api.addMovie(payload);
       setMovies((current) => [movie, ...current]);
-      setForm(EMPTY_FORM);
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
+  }
+
+  async function addMovie(event) {
+    event.preventDefault();
+    const added = await create({
+      title: form.title,
+      year: form.year === '' ? null : Number(form.year),
+      notes: form.notes || null,
+    });
+    if (added) setForm(EMPTY_FORM);
+  }
+
+  function addFromCatalog(result) {
+    return create({
+      title: result.title,
+      year: result.year,
+      tmdb_id: result.tmdb_id,
+      poster_path: result.poster_path,
+    });
   }
 
   async function patch(id, changes) {
@@ -62,6 +78,8 @@ export default function Watchlist() {
 
   return (
     <div className="stack">
+      <Discover inList={(tmdbId) => movies.some((movie) => movie.tmdb_id === tmdbId)} onAdd={addFromCatalog} />
+
       <form className="card row-form" onSubmit={addMovie}>
         <input
           placeholder="Movie title"
@@ -106,6 +124,7 @@ export default function Watchlist() {
           <li key={movie.id} className={movie.watched ? 'card movie watched' : 'card movie'}>
             <label className="check">
               <input type="checkbox" checked={movie.watched} onChange={() => patch(movie.id, { watched: !movie.watched })} />
+              <MoviePoster path={movie.poster_path} title={movie.title} className="poster poster-small" />
               <span>
                 <strong>{movie.title}</strong>
                 {movie.year ? <span className="muted"> ({movie.year})</span> : null}
