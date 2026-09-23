@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { createDb } from './db.js';
+import { createStore } from './store.js';
 import { hashPassword, requireAuth, signToken, verifyPassword } from './auth.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,91 +41,96 @@ function toApiMovie(row) {
   return { ...row, watched: Boolean(row.watched) };
 }
 
-export function createApp({ db = createDb() } = {}) {
+function route(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
+}
+
+export function createApp({ store = createStore() } = {}) {
   const app = express();
   app.use(cors());
   app.use(express.json());
 
-  const statements = {
-    userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
-    insertUser: db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)'),
-    listMovies: db.prepare('SELECT * FROM movies WHERE user_id = ? ORDER BY watched, created_at DESC'),
-    movieById: db.prepare('SELECT * FROM movies WHERE id = ? AND user_id = ?'),
-    insertMovie: db.prepare(
-      'INSERT INTO movies (user_id, title, year, notes, watched, rating) VALUES (@user_id, @title, @year, @notes, @watched, @rating)',
-    ),
-    deleteMovie: db.prepare('DELETE FROM movies WHERE id = ? AND user_id = ?'),
-  };
+  app.get('/api/health', (req, res) => res.json({ ok: true, store: store.name }));
 
-  app.get('/api/health', (req, res) => res.json({ ok: true }));
+  app.post(
+    '/api/auth/register',
+    route(async (req, res) => {
+      const email = String(req.body?.email ?? '').trim().toLowerCase();
+      const password = String(req.body?.password ?? '');
+      if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'A valid email is required' });
+      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      if (await store.findUserByEmail(email)) return res.status(409).json({ error: 'Email is already registered' });
 
-  app.post('/api/auth/register', (req, res) => {
-    const email = String(req.body?.email ?? '').trim().toLowerCase();
-    const password = String(req.body?.password ?? '');
-    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'A valid email is required' });
-    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    if (statements.userByEmail.get(email)) return res.status(409).json({ error: 'Email is already registered' });
+      const user = await store.createUser(email, hashPassword(password));
+      return res.status(201).json({ token: signToken(user), user });
+    }),
+  );
 
-    const info = statements.insertUser.run(email, hashPassword(password));
-    const user = { id: info.lastInsertRowid, email };
-    return res.status(201).json({ token: signToken(user), user });
-  });
-
-  app.post('/api/auth/login', (req, res) => {
-    const email = String(req.body?.email ?? '').trim().toLowerCase();
-    const password = String(req.body?.password ?? '');
-    const row = statements.userByEmail.get(email);
-    if (!row || !verifyPassword(password, row.password_hash)) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-    const user = { id: row.id, email: row.email };
-    return res.json({ token: signToken(user), user });
-  });
+  app.post(
+    '/api/auth/login',
+    route(async (req, res) => {
+      const email = String(req.body?.email ?? '').trim().toLowerCase();
+      const password = String(req.body?.password ?? '');
+      const row = await store.findUserByEmail(email);
+      if (!row || !verifyPassword(password, row.password_hash)) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      const user = { id: row.id, email: row.email };
+      return res.json({ token: signToken(user), user });
+    }),
+  );
 
   app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: req.user }));
 
-  app.get('/api/movies', requireAuth, (req, res) => {
-    res.json({ movies: statements.listMovies.all(req.user.id).map(toApiMovie) });
-  });
+  app.get(
+    '/api/movies',
+    requireAuth,
+    route(async (req, res) => {
+      const movies = await store.listMovies(req.user.id);
+      return res.json({ movies: movies.map(toApiMovie) });
+    }),
+  );
 
-  app.post('/api/movies', requireAuth, (req, res) => {
-    const { movie, errors } = parseMovieInput(req.body ?? {});
-    if (errors.length) return res.status(400).json({ error: errors.join(', ') });
+  app.post(
+    '/api/movies',
+    requireAuth,
+    route(async (req, res) => {
+      const { movie, errors } = parseMovieInput(req.body ?? {});
+      if (errors.length) return res.status(400).json({ error: errors.join(', ') });
+      const created = await store.createMovie(req.user.id, movie);
+      return res.status(201).json({ movie: toApiMovie(created) });
+    }),
+  );
 
-    const info = statements.insertMovie.run({
-      user_id: req.user.id,
-      title: movie.title,
-      year: movie.year ?? null,
-      notes: movie.notes ?? null,
-      watched: movie.watched ?? 0,
-      rating: movie.rating ?? null,
-    });
-    return res.status(201).json({ movie: toApiMovie(statements.movieById.get(info.lastInsertRowid, req.user.id)) });
-  });
+  app.patch(
+    '/api/movies/:id',
+    requireAuth,
+    route(async (req, res) => {
+      const id = Number(req.params.id);
+      if (!(await store.getMovie(id, req.user.id))) return res.status(404).json({ error: 'Movie not found' });
 
-  app.patch('/api/movies/:id', requireAuth, (req, res) => {
-    const existing = statements.movieById.get(Number(req.params.id), req.user.id);
-    if (!existing) return res.status(404).json({ error: 'Movie not found' });
+      const { movie, errors } = parseMovieInput(req.body ?? {}, { partial: true });
+      if (errors.length) return res.status(400).json({ error: errors.join(', ') });
 
-    const { movie, errors } = parseMovieInput(req.body ?? {}, { partial: true });
-    if (errors.length) return res.status(400).json({ error: errors.join(', ') });
+      const updated = await store.updateMovie(id, req.user.id, movie);
+      return res.json({ movie: toApiMovie(updated) });
+    }),
+  );
 
-    const fields = Object.keys(movie);
-    if (fields.length) {
-      const assignments = fields.map((field) => `${field} = @${field}`).join(', ');
-      db.prepare(`UPDATE movies SET ${assignments} WHERE id = @id AND user_id = @user_id`).run({
-        ...movie,
-        id: existing.id,
-        user_id: req.user.id,
-      });
-    }
-    return res.json({ movie: toApiMovie(statements.movieById.get(existing.id, req.user.id)) });
-  });
+  app.delete(
+    '/api/movies/:id',
+    requireAuth,
+    route(async (req, res) => {
+      const removed = await store.deleteMovie(Number(req.params.id), req.user.id);
+      if (!removed) return res.status(404).json({ error: 'Movie not found' });
+      return res.status(204).end();
+    }),
+  );
 
-  app.delete('/api/movies/:id', requireAuth, (req, res) => {
-    const info = statements.deleteMovie.run(Number(req.params.id), req.user.id);
-    if (info.changes === 0) return res.status(404).json({ error: 'Movie not found' });
-    return res.status(204).end();
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
   });
 
   return app;
