@@ -120,22 +120,28 @@ test('OMDb search requires auth and validates queries before calling upstream', 
   assert.equal(calls, 0);
 });
 
-test('OMDb search returns only unique titles and keeps the key upstream', async () => {
+test('OMDb search returns titles and safe posters while keeping the key upstream', async () => {
   const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test-secret', fetchImpl: async (url, options) => {
     assert.equal(url.origin, 'https://www.omdbapi.com');
     assert.equal(url.searchParams.get('apikey'), 'test-secret');
+    if (url.searchParams.has('i')) return { ok: true, json: async () => ({ Response: 'True', Plot: 'A detective pursues a thief.' }) };
     assert.equal(url.searchParams.get('s'), 'Heat & Light');
     assert.equal(url.searchParams.get('type'), 'movie');
     assert.ok(options.signal);
     return { ok: true, json: async () => ({ Response: 'True', Search: [
-      { Title: 'Heat', Year: '1995', imdbID: 'tt0113277', Poster: 'image' },
-      { Title: 'Heat' }, { invalid: true },
+      { Title: 'Heat', Year: '1995', imdbID: 'tt0113277', Poster: 'https://example.com/heat.jpg' },
+      { Title: 'Heat', Poster: 'N/A' }, { Title: 'Missing' },
+      { Title: 'Unsafe', Poster: 'javascript:alert(1)' }, { Title: 'Insecure', Poster: 'http://example.com/poster.jpg' }, { invalid: true },
     ] }) };
   } });
   const token = await registered(server);
   const res = await request(server).get('/api/omdb/search').query({ q: ' Heat & Light ' }).auth(token, { type: 'bearer' });
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { movies: [{ title: 'Heat' }] });
+  assert.deepEqual(res.body, { movies: [
+    { title: 'Heat', poster: 'https://example.com/heat.jpg', description: 'A detective pursues a thief.' },
+    { title: 'Heat', poster: null, description: null }, { title: 'Missing', poster: null, description: null },
+    { title: 'Unsafe', poster: null, description: null }, { title: 'Insecure', poster: null, description: null },
+  ] });
 });
 
 for (const [name, payload, status] of [
@@ -168,5 +174,73 @@ for (const failure of ['network', 'http', 'json', 'timeout', 'missing key']) {
     const res = await request(server).get('/api/omdb/search?q=Heat').auth(token, { type: 'bearer' });
     assert.equal(res.status, failure === 'missing key' ? 503 : 502);
     assert.ok(!JSON.stringify(res.body).includes('test-secret'));
+  });
+}
+
+
+test('persists posters across reads and updates, and validates their URLs', async () => {
+  const server = app();
+  const token = await registered(server);
+  const auth = { Authorization: `Bearer ${token}` };
+  const poster = 'https://example.com/poster.jpg';
+  const created = await request(server).post('/api/movies').set(auth).send({ title: 'Heat', poster });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.movie.poster, poster);
+  const list = await request(server).get('/api/movies').set(auth);
+  assert.equal(list.body.movies[0].poster, poster);
+  const updated = await request(server).patch(`/api/movies/${created.body.movie.id}`).set(auth).send({ watched: true });
+  assert.equal(updated.body.movie.poster, poster);
+  const bad = await request(server).post('/api/movies').set(auth).send({ title: 'Bad', poster: 'javascript:alert(1)' });
+  assert.equal(bad.status, 400);
+});
+
+test('search retains movie results when description lookup fails', async () => {
+  const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test', fetchImpl: async (url) => {
+    if (url.searchParams.has('i')) throw new Error('unavailable');
+    return { ok: true, json: async () => ({ Response: 'True', Search: [{ Title: 'Heat', imdbID: 'tt0113277', Poster: 'N/A' }] }) };
+  } });
+  const token = await registered(server);
+  const res = await request(server).get('/api/omdb/search?q=Heat').auth(token, { type: 'bearer' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.movies, [{ title: 'Heat', poster: null, description: null }]);
+});
+
+
+test('finds and saves missing posters without modifying other movie fields', async () => {
+  let calls = 0;
+  const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test', fetchImpl: async (url) => {
+    calls++;
+    assert.equal(url.searchParams.get('t'), 'The Avengers');
+    return { ok: true, json: async () => ({ Response: 'True', Title: 'The Avengers', Poster: 'https://example.com/avengers.jpg' }) };
+  } });
+  const token = await registered(server);
+  const auth = { Authorization: `Bearer ${token}` };
+  const created = await request(server).post('/api/movies').set(auth).send({ title: 'The Avengers', notes: 'Keep this', rating: 8 });
+  const path = `/api/movies/${created.body.movie.id}/poster`;
+  assert.equal((await request(server).post(path)).status, 401);
+  const other = await registered(server, 'other@example.com');
+  assert.equal((await request(server).post(path).auth(other, { type: 'bearer' })).status, 404);
+  const res = await request(server).post(path).set(auth);
+  assert.equal(res.body.movie.poster, 'https://example.com/avengers.jpg');
+  assert.equal(res.body.movie.notes, 'Keep this');
+  assert.equal(res.body.movie.rating, 8);
+  await request(server).post(path).set(auth);
+  assert.equal(calls, 1);
+  const list = await request(server).get('/api/movies').set(auth);
+  assert.equal(list.body.movies[0].poster, res.body.movie.poster);
+});
+
+for (const mode of ['mismatch', 'unavailable']) {
+  test(`missing poster lookup preserves the movie on ${mode}`, async () => {
+    const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test', fetchImpl: async () => {
+      if (mode === 'unavailable') throw new Error('offline');
+      return { ok: true, json: async () => ({ Response: 'True', Title: 'Other film', Poster: 'https://example.com/other.jpg' }) };
+    } });
+    const token = await registered(server);
+    const auth = { Authorization: `Bearer ${token}` };
+    const created = await request(server).post('/api/movies').set(auth).send({ title: 'The Avengers' });
+    const res = await request(server).post(`/api/movies/${created.body.movie.id}/poster`).set(auth);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.movie.poster, null);
   });
 }

@@ -33,6 +33,7 @@ export const api = {
   me: () => request('/auth/me'),
   searchMovies: (query, signal) => request(`/omdb/search?q=${encodeURIComponent(query)}`, { signal }),
   listMovies: () => request('/movies'),
+  findPoster: (id) => request(`/movies/${id}/poster`, { method: 'POST' }),
   addMovie: (movie) => request('/movies', { method: 'POST', body: movie }),
   updateMovie: (id, patch) => request(`/movies/${id}`, { method: 'PATCH', body: patch }),
   deleteMovie: (id) => request(`/movies/${id}`, { method: 'DELETE' }),

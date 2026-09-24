@@ -24,8 +24,8 @@ export default function AuthForm({ onAuthenticated }) {
   }
 
   return (
-    <div className="card auth-card">
-      <h1>Movie Watchlist</h1>
+    <div className="card auth-card" id="sign-in">
+      <h2>{mode === 'login' ? 'Sign in' : 'Create account'}</h2>
       <p className="muted">{mode === 'login' ? 'Sign in to see your list.' : 'Create an account to start your list.'}</p>
       <form onSubmit={submit}>
         <label>
