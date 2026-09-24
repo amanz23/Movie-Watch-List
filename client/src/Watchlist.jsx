@@ -5,6 +5,7 @@ const EMPTY_FORM = { title: '', year: '', notes: '' };
 
 export default function Watchlist() {
   const [movies, setMovies] = useState([]);
+  const [catalog, setCatalog] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState('');
@@ -16,6 +17,14 @@ export default function Watchlist() {
       .then((data) => setMovies(data.movies))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+
+    fetch('/movies.json')
+      .then((response) => {
+        if (!response.ok) throw new Error('Could not load movie database.');
+        return response.json();
+      })
+      .then((data) => setCatalog(data))
+      .catch((err) => setError(err.message));
   }, []);
 
   const visible = useMemo(() => {
@@ -64,11 +73,27 @@ export default function Watchlist() {
     <div className="stack">
       <form className="card row-form" onSubmit={addMovie}>
         <input
+          list="movie-catalog"
           placeholder="Movie title"
           value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          onChange={(e) => {
+            const title = e.target.value;
+            const match = catalog.find((movie) => movie.title.toLowerCase() === title.toLowerCase());
+            setForm({
+              ...form,
+              title,
+              year: match ? match.year : form.year,
+            });
+          }}
           required
         />
+        <datalist id="movie-catalog">
+          {catalog.map((movie) => (
+            <option key={movie.id} value={movie.title}>
+              {movie.year} · {movie.genre}
+            </option>
+          ))}
+        </datalist>
         <input
           type="number"
           placeholder="Year"
