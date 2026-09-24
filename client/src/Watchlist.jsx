@@ -22,7 +22,17 @@ export default function Watchlist() {
   useEffect(() => {
     api
       .listMovies()
-      .then((data) => setMovies(data.movies))
+      .then(async (data) => {
+        setMovies(data.movies);
+        setLoading(false);
+        // Resolve older entries sequentially to avoid a burst of OMDb requests.
+        for (const item of data.movies.filter((movie) => !movie.poster)) {
+          try {
+            const { movie } = await api.findPoster(item.id);
+            if (movie?.poster) setMovies((current) => current.map((entry) => entry.id === item.id ? { ...entry, poster: movie.poster } : entry));
+          } catch { /* Poster lookup must not prevent using the watchlist. */ }
+        }
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
 
@@ -111,6 +121,13 @@ export default function Watchlist() {
           <div id="movie-search-status" className="muted" role="status">
             {search.query === form.title.trim() ? search.message : ''}
           </div>
+        </div>
+        <input
+          placeholder="Notes (optional)"
+          value={form.notes}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+        />
+        <button type="submit">Add movie</button>
           {search.query === form.title.trim() && search.movies.length > 0 ? (
             <ul className="search-results" aria-label="Movie suggestions">
               {search.movies.map((movie, index) => (
@@ -130,13 +147,7 @@ export default function Watchlist() {
               ))}
             </ul>
           ) : null}
-        </div>
-        <input
-          placeholder="Notes (optional)"
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        />
-        <button type="submit">Add movie</button>
+
       </form>
 
       {error ? <p className="error">{error}</p> : null}

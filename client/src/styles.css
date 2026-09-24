@@ -203,3 +203,7 @@ button.danger {
   .movie { align-items: stretch; flex-direction: column; }
   .actions { justify-content: flex-end; }
 }
+
+.row-form > .search-results { grid-column: 1 / -1; margin-top: 0.25rem; }
+.row-form > .search-results button { align-items: flex-start; padding: 0.85rem; }
+.search-copy { flex: 1; }

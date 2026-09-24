@@ -204,3 +204,43 @@ test('search retains movie results when description lookup fails', async () => {
   assert.equal(res.status, 200);
   assert.deepEqual(res.body.movies, [{ title: 'Heat', poster: null, description: null }]);
 });
+
+
+test('finds and saves missing posters without modifying other movie fields', async () => {
+  let calls = 0;
+  const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test', fetchImpl: async (url) => {
+    calls++;
+    assert.equal(url.searchParams.get('t'), 'The Avengers');
+    return { ok: true, json: async () => ({ Response: 'True', Title: 'The Avengers', Poster: 'https://example.com/avengers.jpg' }) };
+  } });
+  const token = await registered(server);
+  const auth = { Authorization: `Bearer ${token}` };
+  const created = await request(server).post('/api/movies').set(auth).send({ title: 'The Avengers', notes: 'Keep this', rating: 8 });
+  const path = `/api/movies/${created.body.movie.id}/poster`;
+  assert.equal((await request(server).post(path)).status, 401);
+  const other = await registered(server, 'other@example.com');
+  assert.equal((await request(server).post(path).auth(other, { type: 'bearer' })).status, 404);
+  const res = await request(server).post(path).set(auth);
+  assert.equal(res.body.movie.poster, 'https://example.com/avengers.jpg');
+  assert.equal(res.body.movie.notes, 'Keep this');
+  assert.equal(res.body.movie.rating, 8);
+  await request(server).post(path).set(auth);
+  assert.equal(calls, 1);
+  const list = await request(server).get('/api/movies').set(auth);
+  assert.equal(list.body.movies[0].poster, res.body.movie.poster);
+});
+
+for (const mode of ['mismatch', 'unavailable']) {
+  test(`missing poster lookup preserves the movie on ${mode}`, async () => {
+    const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test', fetchImpl: async () => {
+      if (mode === 'unavailable') throw new Error('offline');
+      return { ok: true, json: async () => ({ Response: 'True', Title: 'Other film', Poster: 'https://example.com/other.jpg' }) };
+    } });
+    const token = await registered(server);
+    const auth = { Authorization: `Bearer ${token}` };
+    const created = await request(server).post('/api/movies').set(auth).send({ title: 'The Avengers' });
+    const res = await request(server).post(`/api/movies/${created.body.movie.id}/poster`).set(auth);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.movie.poster, null);
+  });
+}
