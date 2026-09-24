@@ -13,6 +13,12 @@ cp .env.example .env   # set JWT_SECRET for anything beyond local dev
 npm run dev            # API on :3001, UI on :5173 (proxied /api -> :3001)
 ```
 
+### Movie search
+
+Set `OMDB_API_KEY` in the root `.env` to your key from [OMDb](https://www.omdbapi.com/apikey.aspx), then restart the API. The server reads this file regardless of the working directory. Keep `.env` ignored; never put the key in client code or a `VITE_` variable.
+
+Type at least two characters in Movie title to search OMDb, then choose a suggestion or enter a title manually. Search waits briefly after typing and cancels outdated requests. Missing keys, no results, and service failures do not prevent manual entry. The UI no longer asks for or displays years; existing database columns and stored years remain unchanged. No database migration is needed.
+
 ### Using Supabase instead of SQLite
 
 1. Run `supabase/schema.sql` in the Supabase SQL editor.
@@ -35,6 +41,7 @@ Other scripts: `npm test` (API tests), `npm run lint`, `npm run build` (client p
 | POST | `/api/auth/register` | – | Create an account, returns `{ token, user }` |
 | POST | `/api/auth/login` | – | Sign in, returns `{ token, user }` |
 | GET | `/api/auth/me` | Bearer | Current user |
+| GET | `/api/omdb/search?q=title` | Bearer | Search movies; returns `{ movies: [{ title }] }` |
 | GET | `/api/movies` | Bearer | List the user's movies |
 | POST | `/api/movies` | Bearer | Add `{ title, year?, notes?, watched?, rating? }` |
 | PATCH | `/api/movies/:id` | Bearer | Update any of the above fields |

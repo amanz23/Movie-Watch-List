@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
 
-const EMPTY_FORM = { title: '', year: '', notes: '' };
+const EMPTY_FORM = { title: '', notes: '' };
 
 export default function Watchlist() {
   const [movies, setMovies] = useState([]);
-  const [catalog, setCatalog] = useState([]);
+  const [search, setSearch] = useState({ query: '', movies: [], message: '' });
+  const [selectedTitle, setSelectedTitle] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState('');
@@ -18,14 +19,25 @@ export default function Watchlist() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
 
-    fetch('/movies.json')
-      .then((response) => {
-        if (!response.ok) throw new Error('Could not load movie database.');
-        return response.json();
-      })
-      .then((data) => setCatalog(data))
-      .catch((err) => setError(err.message));
   }, []);
+
+  useEffect(() => {
+    const query = form.title.trim();
+    if (query.length < 2 || form.title === selectedTitle) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearch({ query, movies: [], message: 'Searching movies…' });
+      try {
+        const { movies } = await api.searchMovies(query, controller.signal);
+        if (!controller.signal.aborted) {
+          setSearch({ query, movies, message: movies.length ? '' : 'No matches. You can add this title manually.' });
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) setSearch({ query, movies: [], message: err.message });
+      }
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [form.title, selectedTitle]);
 
   const visible = useMemo(() => {
     if (filter === 'watched') return movies.filter((movie) => movie.watched);
@@ -39,11 +51,12 @@ export default function Watchlist() {
     try {
       const { movie } = await api.addMovie({
         title: form.title,
-        year: form.year === '' ? null : Number(form.year),
         notes: form.notes || null,
       });
       setMovies((current) => [movie, ...current]);
       setForm(EMPTY_FORM);
+      setSelectedTitle('');
+      setSearch({ query: '', movies: [], message: '' });
     } catch (err) {
       setError(err.message);
     }
@@ -72,34 +85,38 @@ export default function Watchlist() {
   return (
     <div className="stack">
       <form className="card row-form" onSubmit={addMovie}>
-        <input
-          list="movie-catalog"
-          placeholder="Movie title"
-          value={form.title}
-          onChange={(e) => {
-            const title = e.target.value;
-            const match = catalog.find((movie) => movie.title.toLowerCase() === title.toLowerCase());
-            setForm({
-              ...form,
-              title,
-              year: match ? match.year : form.year,
-            });
-          }}
-          required
-        />
-        <datalist id="movie-catalog">
-          {catalog.map((movie) => (
-            <option key={movie.id} value={movie.title}>
-              {movie.year} · {movie.genre}
-            </option>
-          ))}
-        </datalist>
-        <input
-          type="number"
-          placeholder="Year"
-          value={form.year}
-          onChange={(e) => setForm({ ...form, year: e.target.value })}
-        />
+        <div className="movie-search">
+          <input
+            aria-label="Movie title"
+            aria-describedby="movie-search-status"
+            placeholder="Movie title"
+            value={form.title}
+            maxLength={200}
+            autoComplete="off"
+            onChange={(e) => {
+              setForm({ ...form, title: e.target.value });
+              setSelectedTitle('');
+              setSearch({ query: '', movies: [], message: '' });
+            }}
+            required
+          />
+          <div id="movie-search-status" className="muted" role="status">
+            {search.query === form.title.trim() ? search.message : ''}
+          </div>
+          {search.query === form.title.trim() && search.movies.length > 0 ? (
+            <ul className="search-results" aria-label="Movie suggestions">
+              {search.movies.map((movie) => (
+                <li key={movie.title}>
+                  <button type="button" onClick={() => {
+                    setForm({ ...form, title: movie.title });
+                    setSelectedTitle(movie.title);
+                    setSearch({ query: '', movies: [], message: '' });
+                  }}>{movie.title}</button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
         <input
           placeholder="Notes (optional)"
           value={form.notes}
@@ -133,7 +150,6 @@ export default function Watchlist() {
               <input type="checkbox" checked={movie.watched} onChange={() => patch(movie.id, { watched: !movie.watched })} />
               <span>
                 <strong>{movie.title}</strong>
-                {movie.year ? <span className="muted"> ({movie.year})</span> : null}
                 {movie.notes ? <div className="muted">{movie.notes}</div> : null}
               </span>
             </label>

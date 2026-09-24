@@ -45,7 +45,7 @@ function route(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
 }
 
-export function createApp({ store = createStore() } = {}) {
+export function createApp({ store = createStore(), omdbApiKey = process.env.OMDB_API_KEY, fetchImpl = globalThis.fetch } = {}) {
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -81,6 +81,36 @@ export function createApp({ store = createStore() } = {}) {
   );
 
   app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: req.user }));
+
+  app.get('/api/omdb/search', requireAuth, route(async (req, res) => {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (query.length < 2 || query.length > 200) {
+      return res.status(400).json({ error: 'Search must be between 2 and 200 characters.' });
+    }
+    if (!omdbApiKey) return res.status(503).json({ error: 'Movie search is not configured. You can still add a title manually.' });
+
+    const url = new URL('https://www.omdbapi.com/');
+    url.search = new URLSearchParams({ apikey: omdbApiKey, s: query, type: 'movie' }).toString();
+    try {
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) throw new Error('OMDb request failed');
+      const data = await response.json();
+      if (data.Response === 'False') {
+        if (data.Error === 'Movie not found!') return res.json({ movies: [] });
+        if (/too many results/i.test(data.Error)) return res.status(400).json({ error: 'Too many matches. Try a more specific title.' });
+        if (/limit/i.test(data.Error)) return res.status(503).json({ error: 'Movie search has reached its request limit. Try again later or add a title manually.' });
+        throw new Error('OMDb search unavailable');
+      }
+      if (data.Response !== 'True' || !Array.isArray(data.Search)) throw new Error('Invalid OMDb response');
+      const movies = [...new Set(data.Search
+        .filter((movie) => movie && typeof movie.Title === 'string' && movie.Title.trim())
+        .map((movie) => movie.Title.trim()))].map((title) => ({ title }));
+      return res.json({ movies });
+    } catch {
+      // Do not log upstream errors: they may contain the URL and API key.
+      return res.status(502).json({ error: 'Movie search is unavailable. Try again later or add a title manually.' });
+    }
+  }));
 
   app.get(
     '/api/movies',
