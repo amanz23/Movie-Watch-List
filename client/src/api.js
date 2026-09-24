@@ -9,10 +9,11 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request(path, { method = 'GET', body } = {}) {
+async function request(path, { method = 'GET', body, signal } = {}) {
   const token = getToken();
   const res = await fetch(`/api${path}`, {
     method,
+    signal,
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -30,6 +31,7 @@ export const api = {
   register: (email, password) => request('/auth/register', { method: 'POST', body: { email, password } }),
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
   me: () => request('/auth/me'),
+  searchMovies: (query, signal) => request(`/omdb/search?q=${encodeURIComponent(query)}`, { signal }),
   listMovies: () => request('/movies'),
   addMovie: (movie) => request('/movies', { method: 'POST', body: movie }),
   updateMovie: (id, patch) => request(`/movies/${id}`, { method: 'PATCH', body: patch }),

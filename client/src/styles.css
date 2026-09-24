@@ -106,7 +106,7 @@ button.danger {
 
 .row-form {
   display: grid;
-  grid-template-columns: 2fr 0.8fr 2fr auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) auto;
   gap: 0.5rem;
 }
 
@@ -164,3 +164,9 @@ button.danger {
     grid-template-columns: 1fr;
   }
 }
+
+.movie-search { min-width: 0; }
+.movie-search input { width: 100%; box-sizing: border-box; }
+.search-results { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+.search-results button { width: 100%; text-align: left; margin-bottom: 0.25rem; }
+.row-form { align-items: start; }

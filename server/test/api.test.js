@@ -99,3 +99,74 @@ test('does not leak movies between users', async () => {
     .send({ watched: true });
   assert.equal(patchB.status, 404);
 });
+
+test('adds a manual title without a year', async () => {
+  const server = app();
+  const token = await registered(server);
+  const res = await request(server).post('/api/movies').auth(token, { type: 'bearer' }).send({ title: 'Arrival' });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.movie.year, null);
+});
+
+test('OMDb search requires auth and validates queries before calling upstream', async () => {
+  let calls = 0;
+  const server = createApp({ store: createSqliteStore(':memory:'), fetchImpl: async () => { calls++; } });
+  assert.equal((await request(server).get('/api/omdb/search?q=Arrival')).status, 401);
+  const token = await registered(server);
+  for (const query of ['', 'a', 'x'.repeat(201)]) {
+    const res = await request(server).get('/api/omdb/search').query({ q: query }).auth(token, { type: 'bearer' });
+    assert.equal(res.status, 400);
+  }
+  assert.equal(calls, 0);
+});
+
+test('OMDb search returns only unique titles and keeps the key upstream', async () => {
+  const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test-secret', fetchImpl: async (url, options) => {
+    assert.equal(url.origin, 'https://www.omdbapi.com');
+    assert.equal(url.searchParams.get('apikey'), 'test-secret');
+    assert.equal(url.searchParams.get('s'), 'Heat & Light');
+    assert.equal(url.searchParams.get('type'), 'movie');
+    assert.ok(options.signal);
+    return { ok: true, json: async () => ({ Response: 'True', Search: [
+      { Title: 'Heat', Year: '1995', imdbID: 'tt0113277', Poster: 'image' },
+      { Title: 'Heat' }, { invalid: true },
+    ] }) };
+  } });
+  const token = await registered(server);
+  const res = await request(server).get('/api/omdb/search').query({ q: ' Heat & Light ' }).auth(token, { type: 'bearer' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { movies: [{ title: 'Heat' }] });
+});
+
+for (const [name, payload, status] of [
+  ['no matches', { Response: 'False', Error: 'Movie not found!' }, 200],
+  ['invalid key', { Response: 'False', Error: 'Invalid API key!' }, 502],
+  ['quota exhausted', { Response: 'False', Error: 'Request limit reached!' }, 503],
+  ['broad query', { Response: 'False', Error: 'Too many results.' }, 400],
+  ['malformed response', {}, 502],
+]) {
+  test(`OMDb handles ${name}`, async () => {
+    const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test-secret',
+      fetchImpl: async () => ({ ok: true, json: async () => payload }) });
+    const token = await registered(server);
+    const res = await request(server).get('/api/omdb/search?q=Heat').auth(token, { type: 'bearer' });
+    assert.equal(res.status, status);
+    if (status === 200) assert.deepEqual(res.body.movies, []);
+    assert.ok(!JSON.stringify(res.body).includes('test-secret'));
+  });
+}
+
+for (const failure of ['network', 'http', 'json', 'timeout', 'missing key']) {
+  test(`OMDb handles ${failure} without leaking upstream details`, async () => {
+    const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: failure === 'missing key' ? '' : 'test-secret',
+      fetchImpl: async () => {
+        if (failure === 'missing key') assert.fail('Must not call upstream without a key');
+        if (failure === 'network' || failure === 'timeout') throw new Error('test-secret');
+        return { ok: failure !== 'http', json: async () => { throw new Error('test-secret'); } };
+      } });
+    const token = await registered(server);
+    const res = await request(server).get('/api/omdb/search?q=Heat').auth(token, { type: 'bearer' });
+    assert.equal(res.status, failure === 'missing key' ? 503 : 502);
+    assert.ok(!JSON.stringify(res.body).includes('test-secret'));
+  });
+}
