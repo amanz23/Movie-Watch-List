@@ -24,3 +24,6 @@ create index if not exists movies_user_id_idx on public.movies(user_id);
 -- key, so no anon/authenticated policies are granted: RLS denies all other access.
 alter table public.users enable row level security;
 alter table public.movies enable row level security;
+
+-- Add saved poster URLs without modifying existing movie data.
+alter table public.movies add column if not exists poster text;

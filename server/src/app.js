@@ -5,6 +5,13 @@ import { hashPassword, requireAuth, signToken, verifyPassword } from './auth.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function safePoster(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
+  } catch { return null; }
+}
+
 function parseMovieInput(body, { partial = false } = {}) {
   const errors = [];
   const movie = {};
@@ -20,6 +27,10 @@ function parseMovieInput(body, { partial = false } = {}) {
       errors.push('year must be an integer between 1870 and 2200');
     }
     movie.year = year;
+  }
+  if (body.poster !== undefined) {
+    movie.poster = safePoster(body.poster);
+    if (body.poster !== null && !movie.poster) errors.push('poster must be an HTTPS URL or null');
   }
   if (body.notes !== undefined) {
     movie.notes = body.notes === null ? null : String(body.notes);
@@ -102,16 +113,27 @@ export function createApp({ store = createStore(), omdbApiKey = process.env.OMDB
         throw new Error('OMDb search unavailable');
       }
       if (data.Response !== 'True' || !Array.isArray(data.Search)) throw new Error('Invalid OMDb response');
-      const movies = data.Search
+      const movies = await Promise.all(data.Search
         .filter((movie) => movie && typeof movie.Title === 'string' && movie.Title.trim())
-        .map((movie) => {
-          let poster = null;
-          try {
-            const url = new URL(movie.Poster);
-            if (url.protocol === 'https:' && !url.username && !url.password) poster = url.href;
-          } catch { /* Missing posters, including OMDb's "N/A", use the placeholder. */ }
-          return { title: movie.Title.trim(), poster };
-        });
+        .slice(0, 10)
+        .map(async (movie) => {
+          let description = null;
+          // Search results do not include plots; resolve each exact IMDb match.
+          if (/^tt\d+$/.test(movie.imdbID)) {
+            try {
+              const detailUrl = new URL('https://www.omdbapi.com/');
+              detailUrl.search = new URLSearchParams({ apikey: omdbApiKey, i: movie.imdbID, plot: 'short' }).toString();
+              const detailResponse = await fetchImpl(detailUrl, { signal: AbortSignal.timeout(4000) });
+              if (detailResponse.ok) {
+                const detail = await detailResponse.json();
+                if (detail.Response === 'True' && typeof detail.Plot === 'string' && detail.Plot.trim() && detail.Plot !== 'N/A') {
+                  description = detail.Plot.trim();
+                }
+              }
+            } catch { /* Keep the result selectable when its description is unavailable. */ }
+          }
+          return { title: movie.Title.trim(), poster: safePoster(movie.Poster), description };
+        }));
       return res.json({ movies });
     } catch {
       // Do not log upstream errors: they may contain the URL and API key.

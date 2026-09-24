@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const MOVIE_COLUMNS = 'id, user_id, title, year, notes, watched, rating, created_at';
+const MOVIE_COLUMNS = 'id, user_id, title, poster, year, notes, watched, rating, created_at';
 
 function fail(error) {
   throw new Error(`Supabase: ${error.message}`);
@@ -57,6 +57,7 @@ export function createSupabaseStore({
         .insert({
           user_id: userId,
           title: movie.title,
+          poster: movie.poster ?? null,
           year: movie.year ?? null,
           notes: movie.notes ?? null,
           watched: Boolean(movie.watched),

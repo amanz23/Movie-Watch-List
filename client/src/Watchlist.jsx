@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
 
-const EMPTY_FORM = { title: '', notes: '' };
+const EMPTY_FORM = { title: '', notes: '', poster: null };
 
 function SearchPoster({ src }) {
   const [failed, setFailed] = useState(false);
@@ -58,6 +58,7 @@ export default function Watchlist() {
     try {
       const { movie } = await api.addMovie({
         title: form.title,
+        poster: form.poster,
         notes: form.notes || null,
       });
       setMovies((current) => [movie, ...current]);
@@ -101,7 +102,7 @@ export default function Watchlist() {
             maxLength={200}
             autoComplete="off"
             onChange={(e) => {
-              setForm({ ...form, title: e.target.value });
+              setForm({ ...form, title: e.target.value, poster: null });
               setSelectedTitle('');
               setSearch({ query: '', movies: [], message: '' });
             }}
@@ -115,12 +116,15 @@ export default function Watchlist() {
               {search.movies.map((movie, index) => (
                 <li key={`${movie.title}-${movie.poster}-${index}`}>
                   <button type="button" onClick={() => {
-                    setForm({ ...form, title: movie.title });
+                    setForm({ ...form, title: movie.title, poster: movie.poster });
                     setSelectedTitle(movie.title);
                     setSearch({ query: '', movies: [], message: '' });
                   }}>
                     <SearchPoster key={movie.poster} src={movie.poster} />
-                    <span>{movie.title}</span>
+                    <span className="search-copy">
+                      <strong>{movie.title}</strong>
+                      <span className="muted search-description">{movie.description || 'Description unavailable.'}</span>
+                    </span>
                   </button>
                 </li>
               ))}
@@ -156,14 +160,18 @@ export default function Watchlist() {
       <ul className="movies">
         {visible.map((movie) => (
           <li key={movie.id} className={movie.watched ? 'card movie watched' : 'card movie'}>
-            <label className="check">
-              <input type="checkbox" checked={movie.watched} onChange={() => patch(movie.id, { watched: !movie.watched })} />
+            <div className="movie-identity">
+              <SearchPoster key={movie.poster} src={movie.poster} />
               <span>
                 <strong>{movie.title}</strong>
                 {movie.notes ? <div className="muted">{movie.notes}</div> : null}
               </span>
-            </label>
+            </div>
             <div className="actions">
+              <label className="check">
+                <input type="checkbox" checked={movie.watched} onChange={() => patch(movie.id, { watched: !movie.watched })} aria-label={`Mark ${movie.title} watched`} />
+                Watched
+              </label>
               <select
                 value={movie.rating ?? ''}
                 onChange={(e) => patch(movie.id, { rating: e.target.value === '' ? null : Number(e.target.value) })}

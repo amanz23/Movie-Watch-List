@@ -29,13 +29,18 @@ export function createSqliteStore(file = process.env.DATABASE_FILE ?? 'data/watc
     CREATE INDEX IF NOT EXISTS movies_user_id_idx ON movies(user_id);
   `);
 
+  // Upgrade existing local databases without changing their saved movies.
+  if (!db.prepare('PRAGMA table_info(movies)').all().some((column) => column.name === 'poster')) {
+    db.exec('ALTER TABLE movies ADD COLUMN poster TEXT');
+  }
+
   const statements = {
     userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
     insertUser: db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)'),
     listMovies: db.prepare('SELECT * FROM movies WHERE user_id = ? ORDER BY watched, created_at DESC'),
     movieById: db.prepare('SELECT * FROM movies WHERE id = ? AND user_id = ?'),
     insertMovie: db.prepare(
-      'INSERT INTO movies (user_id, title, year, notes, watched, rating) VALUES (@user_id, @title, @year, @notes, @watched, @rating)',
+      'INSERT INTO movies (user_id, title, year, notes, watched, rating, poster) VALUES (@user_id, @title, @year, @notes, @watched, @rating, @poster)',
     ),
     deleteMovie: db.prepare('DELETE FROM movies WHERE id = ? AND user_id = ?'),
   };
@@ -61,6 +66,7 @@ export function createSqliteStore(file = process.env.DATABASE_FILE ?? 'data/watc
       const info = statements.insertMovie.run({
         user_id: userId,
         title: movie.title,
+        poster: movie.poster ?? null,
         year: movie.year ?? null,
         notes: movie.notes ?? null,
         watched: movie.watched ?? 0,
