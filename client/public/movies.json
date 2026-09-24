@@ -1,0 +1,14 @@
+[
+  { "id": 1, "title": "The Dark Knight", "year": 2008, "genre": "Action" },
+  { "id": 2, "title": "Inception", "year": 2010, "genre": "Sci-Fi" },
+  { "id": 3, "title": "Interstellar", "year": 2014, "genre": "Sci-Fi" },
+  { "id": 4, "title": "Spider-Man: Into the Spider-Verse", "year": 2018, "genre": "Animation" },
+  { "id": 5, "title": "The Avengers", "year": 2012, "genre": "Action" },
+  { "id": 6, "title": "Howl's Moving Castle", "year": 2004, "genre": "Animation" },
+  { "id": 7, "title": "Spirited Away", "year": 2001, "genre": "Animation" },
+  { "id": 8, "title": "The Lord of the Rings: The Fellowship of the Ring", "year": 2001, "genre": "Fantasy" },
+  { "id": 9, "title": "Harry Potter and the Sorcerer's Stone", "year": 2001, "genre": "Fantasy" },
+  { "id": 10, "title": "Toy Story", "year": 1995, "genre": "Animation" },
+  { "id": 11, "title": "Jurassic Park", "year": 1993, "genre": "Adventure" },
+  { "id": 12, "title": "Back to the Future", "year": 1985, "genre": "Sci-Fi" }
+]
