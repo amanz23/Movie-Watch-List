@@ -21,21 +21,20 @@ export default function App() {
     setUser(null);
   }
 
-  if (checking) return <main className="app"><p className="muted">Loading…</p></main>;
-  if (!user) return <main className="app"><AuthForm onAuthenticated={setUser} /></main>;
-
   return (
-    <main className="app">
+    <>
       <header className="header">
-        <h1>Movie Watchlist</h1>
-        <div className="muted">
-          {user.email}
-          <button type="button" className="link" onClick={signOut}>
-            Sign out
-          </button>
+        <div className="account-controls muted">
+          {user ? <>
+            <span>{user.email}</span>
+            <button type="button" className="link" onClick={signOut}>Sign out</button>
+          </> : !checking ? <a className="link" href="#sign-in">Sign in</a> : null}
         </div>
+        <h1>Movie Watchlist</h1>
       </header>
-      <Watchlist />
-    </main>
+      <main className="app">
+        {checking ? <p className="muted">Loading…</p> : user ? <Watchlist /> : <AuthForm onAuthenticated={setUser} />}
+      </main>
+    </>
   );
 }

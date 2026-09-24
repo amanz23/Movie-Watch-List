@@ -102,9 +102,16 @@ export function createApp({ store = createStore(), omdbApiKey = process.env.OMDB
         throw new Error('OMDb search unavailable');
       }
       if (data.Response !== 'True' || !Array.isArray(data.Search)) throw new Error('Invalid OMDb response');
-      const movies = [...new Set(data.Search
+      const movies = data.Search
         .filter((movie) => movie && typeof movie.Title === 'string' && movie.Title.trim())
-        .map((movie) => movie.Title.trim()))].map((title) => ({ title }));
+        .map((movie) => {
+          let poster = null;
+          try {
+            const url = new URL(movie.Poster);
+            if (url.protocol === 'https:' && !url.username && !url.password) poster = url.href;
+          } catch { /* Missing posters, including OMDb's "N/A", use the placeholder. */ }
+          return { title: movie.Title.trim(), poster };
+        });
       return res.json({ movies });
     } catch {
       // Do not log upstream errors: they may contain the URL and API key.

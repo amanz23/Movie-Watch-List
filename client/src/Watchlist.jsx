@@ -3,6 +3,13 @@ import { api } from './api.js';
 
 const EMPTY_FORM = { title: '', notes: '' };
 
+function SearchPoster({ src }) {
+  const [failed, setFailed] = useState(false);
+  return src && !failed ? (
+    <img className="search-poster" src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+  ) : <span className="search-poster poster-placeholder" aria-hidden="true">No poster</span>;
+}
+
 export default function Watchlist() {
   const [movies, setMovies] = useState([]);
   const [search, setSearch] = useState({ query: '', movies: [], message: '' });
@@ -105,13 +112,16 @@ export default function Watchlist() {
           </div>
           {search.query === form.title.trim() && search.movies.length > 0 ? (
             <ul className="search-results" aria-label="Movie suggestions">
-              {search.movies.map((movie) => (
-                <li key={movie.title}>
+              {search.movies.map((movie, index) => (
+                <li key={`${movie.title}-${movie.poster}-${index}`}>
                   <button type="button" onClick={() => {
                     setForm({ ...form, title: movie.title });
                     setSelectedTitle(movie.title);
                     setSearch({ query: '', movies: [], message: '' });
-                  }}>{movie.title}</button>
+                  }}>
+                    <SearchPoster key={movie.poster} src={movie.poster} />
+                    <span>{movie.title}</span>
+                  </button>
                 </li>
               ))}
             </ul>

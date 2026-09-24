@@ -120,7 +120,7 @@ test('OMDb search requires auth and validates queries before calling upstream', 
   assert.equal(calls, 0);
 });
 
-test('OMDb search returns only unique titles and keeps the key upstream', async () => {
+test('OMDb search returns titles and safe posters while keeping the key upstream', async () => {
   const server = createApp({ store: createSqliteStore(':memory:'), omdbApiKey: 'test-secret', fetchImpl: async (url, options) => {
     assert.equal(url.origin, 'https://www.omdbapi.com');
     assert.equal(url.searchParams.get('apikey'), 'test-secret');
@@ -128,14 +128,19 @@ test('OMDb search returns only unique titles and keeps the key upstream', async 
     assert.equal(url.searchParams.get('type'), 'movie');
     assert.ok(options.signal);
     return { ok: true, json: async () => ({ Response: 'True', Search: [
-      { Title: 'Heat', Year: '1995', imdbID: 'tt0113277', Poster: 'image' },
-      { Title: 'Heat' }, { invalid: true },
+      { Title: 'Heat', Year: '1995', imdbID: 'tt0113277', Poster: 'https://example.com/heat.jpg' },
+      { Title: 'Heat', Poster: 'N/A' }, { Title: 'Missing' },
+      { Title: 'Unsafe', Poster: 'javascript:alert(1)' }, { Title: 'Insecure', Poster: 'http://example.com/poster.jpg' }, { invalid: true },
     ] }) };
   } });
   const token = await registered(server);
   const res = await request(server).get('/api/omdb/search').query({ q: ' Heat & Light ' }).auth(token, { type: 'bearer' });
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { movies: [{ title: 'Heat' }] });
+  assert.deepEqual(res.body, { movies: [
+    { title: 'Heat', poster: 'https://example.com/heat.jpg' },
+    { title: 'Heat', poster: null }, { title: 'Missing', poster: null },
+    { title: 'Unsafe', poster: null }, { title: 'Insecure', poster: null },
+  ] });
 });
 
 for (const [name, payload, status] of [
