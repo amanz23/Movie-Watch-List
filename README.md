@@ -4,7 +4,7 @@ A personal movie watchlist app with accounts: register/sign in, add movies, mark
 
 
 # Deployed Application
- [URL HERE]
+ (https://creative-gelato-00e492.netlify.app/#sign-in)
 
 
 # Demo Video: 
