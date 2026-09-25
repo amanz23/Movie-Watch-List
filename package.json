@@ -15,7 +15,7 @@
     "start": "npm -w server start",
     "test": "npm -w server test",
     "lint": "eslint .",
-    "build:netlify": "node scripts/netlify-build.mjs"
+    "build:netlify": "npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.1",
@@ -24,5 +24,8 @@
     "eslint-plugin-react": "^7.37.1",
     "eslint-plugin-react-hooks": "^5.0.0",
     "globals": "^15.9.0"
+  },
+  "dependencies": {
+    "serverless-http": "^4.0.0"
   }
 }
