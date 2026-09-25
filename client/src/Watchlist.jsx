@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
+import StarRating from './StarRating.jsx';
 
 const EMPTY_FORM = { title: '', notes: '', poster: null };
 
@@ -85,8 +86,10 @@ export default function Watchlist() {
     try {
       const { movie } = await api.updateMovie(id, changes);
       setMovies((current) => current.map((item) => (item.id === id ? movie : item)));
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     }
   }
 
@@ -183,18 +186,7 @@ export default function Watchlist() {
                 <input type="checkbox" checked={movie.watched} onChange={() => patch(movie.id, { watched: !movie.watched })} aria-label={`Mark ${movie.title} watched`} />
                 Watched
               </label>
-              <select
-                value={movie.rating ?? ''}
-                onChange={(e) => patch(movie.id, { rating: e.target.value === '' ? null : Number(e.target.value) })}
-                aria-label={`Rating for ${movie.title}`}
-              >
-                <option value="">Rate</option>
-                {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
+              <StarRating title={movie.title} rating={movie.rating} onChange={(rating) => patch(movie.id, { rating })} />
               <button type="button" className="danger" onClick={() => remove(movie.id)}>
                 Delete
               </button>

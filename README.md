@@ -48,3 +48,7 @@ Other scripts: `npm test` (API tests), `npm run lint`, `npm run build` (client p
 | DELETE | `/api/movies/:id` | Bearer | Remove a movie |
 
 Movies are scoped per user; requests for another user's movie return 404.
+
+### Star ratings
+
+Click the yellow star next to Watched to open the five-star picker. Click the left half of a star for a half rating or the right half for a full rating (0.5–5 stars). The saved score appears beside the yellow star. Keyboard users can Tab through each half-star option and press Enter or Space; Escape dismisses the picker. Clear rating removes the score. Existing 1–10 scores display as 0.5–5 stars (for example, 7 becomes 3.5/5). Storage and API scores remain 1–10, so no rating migration is required.
