@@ -32,7 +32,7 @@ export default [
     },
   },
   {
-    files: ['*.js', 'client/vite.config.js'],
+    files: ['*.js', 'scripts/**/*.mjs', 'client/vite.config.js'],
     languageOptions: { globals: { ...globals.node } },
   },
 ];
