@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import { createStore } from './store.js';
 import { hashPassword, requireAuth, signToken, verifyPassword } from './auth.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -56,7 +55,8 @@ function route(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
 }
 
-export function createApp({ store = createStore(), omdbApiKey = process.env.OMDB_API_KEY, fetchImpl = globalThis.fetch } = {}) {
+export function createApp({ store, omdbApiKey = process.env.OMDB_API_KEY, fetchImpl = globalThis.fetch } = {}) {
+  if (!store) throw new Error('A storage adapter is required');
   const app = express();
   app.use(cors());
   app.use(express.json());

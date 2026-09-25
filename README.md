@@ -164,27 +164,30 @@ npm run build
 
 The production frontend also requires a running backend API with its environment variables and database connection configured. `npm start` starts the backend only.
 
-## Deploying with Netlify and Render
+## Deploying on Netlify
 
-Netlify hosts the React frontend, Render runs the Express API, and Supabase stores the data. The repository pins Node.js 22 for hosting. Deploy the same branch to both services; merge the deployment PR into `main` before selecting `main`.
+Netlify hosts both the React website and the Express API through Netlify Functions. Supabase stores the data. Render and `BACKEND_URL` are no longer required.
 
 ### 1. Prepare Supabase
 
-Run `supabase/schema.sql` for a new database. For an existing database, ensure the poster migration in `supabase/migrations/20260924_movie_posters.sql` has been applied.
+Run `supabase/schema.sql` for a new database, or apply `supabase/migrations/20260924_movie_posters.sql` if upgrading an existing database without the poster column.
 
-### 2. Deploy the backend on Render
+### 2. Configure the Netlify project
 
-Create a Render **Web Service**, connect this GitHub repository, and use:
+Merge the Netlify Functions PR into `main`, then deploy that branch. Keep the base directory at the repository root. The included `netlify.toml` configures:
 
 | Setting | Value |
 | --- | --- |
-| Branch | `main` (after merging the deployment PR) |
-| Root directory | Leave blank (repository root) |
-| Build command | `npm ci` |
-| Start command | `npm start` |
-| Health check path | `/api/health` |
+| Build command | `npm run build:netlify` |
+| Publish directory | `client/dist` |
+| Functions directory | `netlify/functions` |
+| Node.js version | 22 |
 
-In Render's environment settings, add:
+The build command remains compatible with the earlier dashboard setup, but no longer requires a backend URL. API requests are routed to the `api` function before the React page fallback.
+
+### 3. Add environment variables
+
+In Netlify, open **Project configuration → Environment variables** and add the following values. Include **Functions** scope (or all scopes if scope selection is unavailable), and apply them to the Production deploy context. Set them for Deploy Previews too if you want to test previews, preferably with a separate test database.
 
 ```env
 DB_DRIVER=supabase
@@ -194,33 +197,14 @@ JWT_SECRET=YOUR_LONG_RANDOM_SECRET
 OMDB_API_KEY=YOUR_OMDB_KEY
 ```
 
-Use your real values in the hosting dashboard, never in committed files. Do not copy the local `PORT` setting; Render supplies its own port. The server already reads it. Use Supabase for deployed storage rather than local SQLite files.
+Enter actual values in the Netlify dashboard, never in Git or frontend code. The function requires Supabase credentials and a JWT secret; missing configuration returns a setup error rather than falling back to local SQLite or the development secret. Missing OMDb configuration disables search but still allows manual movie entry.
 
-After the service deploys, visit its public URL followed by `/api/health`. Confirm it returns `{"ok":true,"store":"supabase"}`. Copy the service's HTTPS origin, such as `https://your-api.onrender.com`.
+Remove the old `BACKEND_URL` setting if present. There is no need to set `PORT` on Netlify. Local `.env` files are not uploaded. Save the settings and trigger a new deployment.
 
-### 3. Deploy the frontend on Netlify
+### 4. Verify the deployment
 
-Import this repository from GitHub. Keep the base directory at the repository root. The included `netlify.toml` sets:
+Visit your Netlify URL followed by `/api/health` and confirm `{"ok":true,"store":"supabase"}`. Then check registration, login, search, posters, adding movies, watched status, star ratings, and deletion. Refresh or sign back in to verify persistence.
 
-| Setting | Value |
-| --- | --- |
-| Build command | `npm run build:netlify` |
-| Publish directory | `client/dist` |
+The build can succeed before runtime secrets are set; API requests will return a configuration error until the Functions environment is configured and redeployed. Use Netlify's function logs when troubleshooting runtime failures.
 
-Before building, set the following environment variable in Netlify with build scope:
-
-```env
-BACKEND_URL=https://YOUR_ACTUAL_RENDER_HOST.onrender.com
-```
-
-Replace the example with your actual Render origin, without `/api` or other paths. This URL is not a secret. Keep the database keys, JWT secret, and OMDb key on Render only.
-
-The Netlify build validates `BACKEND_URL`, builds the frontend, and generates `client/dist/_redirects`. API requests are proxied to Render before the React page fallback is applied. A missing or invalid backend URL stops the build with setup instructions. If the backend URL changes, update the Netlify setting and redeploy.
-
-Local development continues to use `npm run dev`. A regular `npm run build` does not require `BACKEND_URL`.
-
-### 4. Verify the deployed application
-
-Open the Netlify URL and check registration, login, search, posters, saving movies, watched status, star ratings, and deletion. Refresh or sign back in to verify saved data persists. Also check `/api/health` through the Netlify URL to verify the proxy.
-
-Finally, replace the deployed application placeholder near the top of this README with the Netlify URL, and record the demo using that deployed site.
+Local development still uses `npm run dev` and supports either SQLite or Supabase. No additional database migration is needed for Netlify Functions. Update the deployed application link near the top of this README after deployment.

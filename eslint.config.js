@@ -32,7 +32,7 @@ export default [
     },
   },
   {
-    files: ['*.js', 'scripts/**/*.mjs', 'client/vite.config.js'],
+    files: ['*.js', 'netlify/**/*.mjs', 'client/vite.config.js'],
     languageOptions: { globals: { ...globals.node } },
   },
 ];
