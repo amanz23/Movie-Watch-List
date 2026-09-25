@@ -56,9 +56,35 @@ test('deployed function fails safely without a JWT secret', async () => {
   try {
     const result = await invoke(handler, '/api/health');
     assert.equal(result.statusCode, 503);
-    assert.match(JSON.parse(result.body).error, /Configure Supabase/);
+    assert.match(JSON.parse(result.body).error, /Missing or empty:/);
   } finally {
     if (saved === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = saved;
+  }
+});
+
+
+test('configuration errors identify missing names and invalid driver without exposing values', async () => {
+  const names = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET', 'DB_DRIVER'];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    process.env.SUPABASE_URL = 'https://private-project.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'secret-service-role-value';
+    process.env.JWT_SECRET = 'secret-jwt-value';
+    process.env.DB_DRIVER = 'sqlite';
+    let result = await invoke(handler, '/api/health');
+    assert.equal(result.statusCode, 503);
+    assert.match(JSON.parse(result.body).error, /DB_DRIVER must be exactly supabase/);
+    assert.doesNotMatch(result.body, /private-project|secret-service-role-value|secret-jwt-value/);
+    process.env.DB_DRIVER = 'supabase';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = '   ';
+    result = await invoke(handler, '/api/health');
+    assert.match(JSON.parse(result.body).error, /Missing or empty: SUPABASE_SERVICE_ROLE_KEY/);
+    assert.doesNotMatch(result.body, /DB_DRIVER must|private-project|secret-jwt-value/);
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
   }
 });
