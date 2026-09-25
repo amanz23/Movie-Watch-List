@@ -2,53 +2,164 @@
 
 A personal movie watchlist app with accounts: register/sign in, add movies, mark them watched, rate them, and filter the list.
 
-- `server/` — Express API, pluggable storage (SQLite or Supabase Postgres), JWT auth with bcrypt-hashed passwords
-- `client/` — React (Vite) single-page UI
 
-## Getting started
+# Deployed Application
+ [URL HERE]
+
+
+# Demo Video: 
+[URL Here]
+
+# Features
+
+This Application is a place where you can create your own simple movie watchlist. 
+Users can can:
+-create a login
+-Sign in/ Sign out
+-Search a movie and and add comments to add to Watch List
+-Mark movie as watched, watched movie will be added into "Watched" Section
+-Add Stars to movie (1-5)
+-Delete Movies from Users Watch List 
+
+# Technoligies Used
+- React: UI and interactive components
+- Vite: Frontend Development server
+- Javascript + CSS: Application Behavior and styling
+- Node.js + Express: Backend API
+- Supabase PostgresSQL: Database
+- SQLite: locally stored Database
+- OMDb API: movie search, posters and descriptions
+
+## Project Structure
+
+```text
+Movie-Watch-List/
+├── client/
+│   └── src/
+│       ├── App.jsx          # Page layout and account state
+│       ├── AuthForm.jsx     # Registration and login
+│       ├── Watchlist.jsx    # Movie search and watchlist management
+│       ├── StarRating.jsx   # Half-star rating picker
+│       ├── api.js           # Requests to the backend
+│       └── styles.css       # Application styling
+├── server/
+│   ├── src/
+│   │   ├── index.js         # Environment loading and server startup
+│   │   ├── app.js           # API routes and input validation
+│   │   ├── auth.js          # Password and token handling
+│   │   └── stores/          # SQLite and Supabase storage
+│   └── test/               # API tests
+├── supabase/
+│   ├── schema.sql          # Database setup
+│   └── migrations/         # Updates for existing databases
+├── .env.example            # Environment variable template
+└── package.json            # Project scripts and dependencies
+```
+
+## Setup Instructions
+
+### 1. Clone the repository
+
+Install Node.js with npm, then clone the project:
+
+```bash
+git clone https://github.com/amanz23/Movie-Watch-List.git
+cd Movie-Watch-List
+```
+
+Repository access is required if the repository is private.
+
+### 2. Install dependencies
 
 ```bash
 npm install
-cp .env.example .env   # set JWT_SECRET for anything beyond local dev
-npm run dev            # API on :3001, UI on :5173 (proxied /api -> :3001)
 ```
 
-### Movie search
+### 3. Configure environment variables
 
-Set `OMDB_API_KEY` in the root `.env` to your key from [OMDb](https://www.omdbapi.com/apikey.aspx), then restart the API. The server reads this file regardless of the working directory. Keep `.env` ignored; never put the key in client code or a `VITE_` variable.
-
-Type at least two characters in Movie title to search OMDb, then choose a suggestion or enter a title manually. Suggestions include a poster, title, and short description, with fallbacks when details are unavailable. Descriptions require up to ten additional OMDb requests per search and count toward your API quota. Selecting a result saves its poster with the watchlist entry; editing the title clears that selection. The watchlist displays the poster before the title. When the watchlist loads, older entries without posters are looked up by title (and stored year when available). Matching posters are saved automatically; unavailable or mismatched results retain the placeholder. Each missing entry uses one OMDb request per list load until a poster is found. Search previews span the full form width. Search waits briefly after typing and cancels outdated requests. Missing keys, no results, and service failures do not prevent manual entry. The UI no longer asks for or displays years; existing database columns and stored years remain unchanged. SQLite adds the poster column automatically. For an existing Supabase database, run `supabase/migrations/20260924_movie_posters.sql` in the SQL editor before starting this version.
-
-### Using Supabase instead of SQLite
-
-1. Run `supabase/schema.sql` in the Supabase SQL editor.
-2. Set in `.env`:
+Create a root environment file if you do not already have one:
 
 ```bash
-DB_DRIVER=supabase
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+cp .env.example .env
 ```
 
-The API is the only client of the database and uses the `service_role` key, so RLS is enabled with no policies — nothing can read the tables with the anon/publishable key. Never ship the service_role key to the browser. `GET /api/health` reports the active store.
+For Supabase storage, configure the following values in `.env`:
 
-Other scripts: `npm test` (API tests), `npm run lint`, `npm run build` (client production build), `npm start` (API only).
+```env
+PORT=3001
+JWT_SECRET=REPLACE_WITH_A_LONG_RANDOM_SECRET
+OMDB_API_KEY=REPLACE_WITH_YOUR_OMDB_KEY
 
-## API
+DB_DRIVER=supabase
+SUPABASE_URL=REPLACE_WITH_YOUR_SUPABASE_PROJECT_URL
+SUPABASE_SERVICE_ROLE_KEY=REPLACE_WITH_YOUR_SERVICE_ROLE_KEY
+```
 
-| Method | Path | Auth | Description |
-| --- | --- | --- | --- |
-| POST | `/api/auth/register` | – | Create an account, returns `{ token, user }` |
-| POST | `/api/auth/login` | – | Sign in, returns `{ token, user }` |
-| GET | `/api/auth/me` | Bearer | Current user |
-| GET | `/api/omdb/search?q=title` | Bearer | Search movies; returns `{ movies: [{ title, poster, description }] }` |
-| GET | `/api/movies` | Bearer | List the user's movies |
-| POST | `/api/movies` | Bearer | Add `{ title, poster?, year?, notes?, watched?, rating? }` |
-| PATCH | `/api/movies/:id` | Bearer | Update any of the above fields |
-| DELETE | `/api/movies/:id` | Bearer | Remove a movie |
+Keep `.env` private and out of Git. OMDb and Supabase credentials are used by the backend and should never be added to frontend code.
 
-Movies are scoped per user; requests for another user's movie return 404.
+### 4. Set up the database
 
-### Star ratings
+For a new Supabase database, run the contents of `supabase/schema.sql` in the Supabase SQL editor.
 
-Click the yellow star next to Watched to open the five-star picker. Click the left half of a star for a half rating or the right half for a full rating (0.5–5 stars). The saved score appears beside the yellow star. Keyboard users can Tab through each half-star option and press Enter or Space; Escape dismisses the picker. Clear rating removes the score. Existing 1–10 scores display as 0.5–5 stars (for example, 7 becomes 3.5/5). Storage and API scores remain 1–10, so no rating migration is required.
+If upgrading an existing database that does not have the movie poster column, run `supabase/migrations/20260924_movie_posters.sql`, or execute:
+
+```sql
+alter table public.movies add column if not exists poster text;
+```
+
+The application uses custom `public.users` and `public.movies` tables. Account authentication is handled by the Express backend rather than Supabase Auth.
+
+For local SQLite storage instead, set:
+
+```env
+DB_DRIVER=sqlite
+DATABASE_FILE=data/watchlist.db
+```
+
+The local database is created automatically.
+
+### 5. Start the application
+
+```bash
+npm run dev
+```
+
+By default:
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3001`
+
+If the frontend port is occupied, open the URL printed in the terminal. If the backend reports that port 3001 is already in use, stop the earlier server before restarting the app.
+
+### 6. Use the application
+
+1. Register an account or sign in.
+2. Enter a movie title and select a search result with a poster and description.
+3. Add optional notes and click **Add movie**. Manual title entry is also supported.
+4. Mark the movie as watched when finished.
+5. Click the yellow star beside **Watched** to choose a rating from 0.5 to 5 stars. Select the left half of a star for a half-star rating or the right half for a full star.
+6. Filter the list by watched or unwatched movies, or delete movies as needed.
+
+Selected posters are saved with the watchlist entry. Older entries without posters are looked up when the list loads; unavailable images use a placeholder. Search and poster lookup require a configured OMDb key and count toward its request quota.
+
+## Testing and Build
+
+Run the API tests:
+
+```bash
+npm test
+```
+
+Check code quality:
+
+```bash
+npm run lint
+```
+
+Build the frontend:
+
+```bash
+npm run build
+```
+
+The production frontend also requires a running backend API with its environment variables and database connection configured. `npm start` starts the backend only.
