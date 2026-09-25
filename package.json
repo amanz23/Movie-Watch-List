@@ -14,7 +14,8 @@
     "build": "npm -w client run build",
     "start": "npm -w server start",
     "test": "npm -w server test",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build:netlify": "node scripts/netlify-build.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.1",

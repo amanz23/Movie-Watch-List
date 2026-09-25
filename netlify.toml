@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build:netlify"
+  publish = "client/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Set BACKEND_URL in the Netlify dashboard to your Render HTTPS origin.
+# The build script writes API proxy and SPA fallback rules to dist/_redirects.
